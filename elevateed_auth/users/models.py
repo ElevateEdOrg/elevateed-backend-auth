@@ -11,3 +11,5 @@ class Users(models.Model):
     class Meta:
         managed = False  # Django does not manage this table
         db_table = 'users'
+
+

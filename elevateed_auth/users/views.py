@@ -13,9 +13,9 @@ import json
 from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
-from django.contrib.auth.tokens import custom_password_reset_token
 from django.urls import reverse
-
+from elevateed_auth.tokens import custom_password_reset_token
+from datetime import datetime
 
 # User Registration View
 @csrf_exempt  # This will disable CSRF protection for this view
@@ -126,11 +126,13 @@ def password_reset_request(request):
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
 
 # Password Reset Confirmation View
-@csrf_exempt
+@csrf_exempt  # Disable CSRF protection for this view
 def password_reset_confirm(request, uidb64, token):
     if request.method == 'POST':
         form_data = json.loads(request.body)  # Get the form data
         new_password = form_data['password']
+        # print password reset form data
+        print(f"New Password: {new_password}")
 
         try:
             user_id = force_str(urlsafe_base64_decode(uidb64))  # Decode the user ID
@@ -139,16 +141,25 @@ def password_reset_confirm(request, uidb64, token):
                 cursor.execute("SELECT id, email FROM users WHERE id = %s", [user_id])
                 user = cursor.fetchone()
 
-                if user and custom_password_reset_token.check_token(user_id, token):  # Validate token
-                    hashed_password = make_password(new_password)
+                if user:
+                    # Get the timestamp from the token
+                    token_timestamp = custom_password_reset_token._num_seconds(datetime.now())
 
-                    cursor.execute("UPDATE users SET password = %s WHERE id = %s", [hashed_password, user_id])
+                    # Check if the token has expired
+                    if custom_password_reset_token.token_expired(token_timestamp):
+                        return JsonResponse({'status': 'error', 'message': 'Token has expired'})
 
-                    return JsonResponse({'status': 'success', 'message': 'Password reset successfully'})
-                else:
-                    return JsonResponse({'status': 'error', 'message': 'Invalid token or user ID'})
+                    # Validate token
+                    if custom_password_reset_token.check_token(user_id, token):
+                        hashed_password = make_password(new_password)
+                        cursor.execute("UPDATE users SET password = %s WHERE id = %s", [hashed_password, user_id])
+                        return JsonResponse({'status': 'success', 'message': 'Password reset successfully'})
+                    else:
+                        return JsonResponse({'status': 'error', 'message': 'Invalid token or user ID'})
 
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)})
 
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+
+   
