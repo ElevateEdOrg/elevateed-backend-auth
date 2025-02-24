@@ -49,7 +49,7 @@ SIMPLE_JWT = {
     # Other JWT settings if needed
 }
 
-PASSWORD_RESET_TIMEOUT = 600  # Token expiry time set to 10 mins 
+ 
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -125,7 +125,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# settings.py
 
 # settings.py
 

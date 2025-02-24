@@ -14,7 +14,6 @@ from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.urls import reverse
-from elevateed_auth.tokens import custom_password_reset_token
 from datetime import datetime
 
 # User Registration View
@@ -45,8 +44,8 @@ def create_jwt_token(user_id, full_name, email, role):
         'full_name': full_name,
         'email': email,
         'role': role,
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30),  # Token expiration time
-        'iat': datetime.datetime.utcnow()  # Token issuance time
+        'exp': datetime.utcnow() + timedelta(days=30),  # Token expiration time
+        'iat': datetime.utcnow()  # Token issuance time
     }
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
     return token
@@ -86,80 +85,86 @@ def login_user(request):
                     return JsonResponse({'status': 'error', 'message': 'Invalid password'})
             else:
                 return JsonResponse({'status': 'error', 'message': 'Invalid credentials'})
+    
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
 
-# Password Reset Request View
-@csrf_exempt  # Disable CSRF protection for this view
-def password_reset_request(request):
+from django.utils.crypto import get_random_string
+from django.core.mail import send_mail
+from django.utils.timezone import now, timedelta
+from django.conf import settings
+
+# Store OTPs temporarily with expiration times
+otp_storage = {}
+
+def generate_otp():
+    return get_random_string(length=6, allowed_chars='0123456789')
+
+def send_otp_via_email(email, otp):
+    subject = 'Password Reset OTP'
+    message = f'Your OTP for password reset is {otp}. It will expire in 2 minutes.'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+
+@csrf_exempt
+def forgot_password_request(request):
     if request.method == 'POST':
-        form_data = json.loads(request.body)  # Get the form data
-        email = form_data['email']
+        data = json.loads(request.body)
+        email = data.get('email')
 
+        # Get user from the database (without Django ORM)
         with connection.cursor() as cursor:
             cursor.execute("SELECT id, email FROM users WHERE email = %s", [email])
             user = cursor.fetchone()
 
-            if user:
-                user_id = user[0]
-                token = custom_password_reset_token.make_token(user_id)  # Generate token
-                uidb64 = urlsafe_base64_encode(force_bytes(user_id))  # Encode user ID
-                print(f"Token: {token}, UIDB64: {uidb64}")
+        if user:
+            otp = generate_otp()
+            otp_expiration = now() + timedelta(minutes=2)
 
-                reset_link = request.build_absolute_uri(reverse('password_reset_confirm', kwargs={
-                    'uidb64': uidb64,
-                    'token': token
-                }))  # Generate password reset URL
-                print(f"Reset Link: {reset_link}")
+            # Save OTP and expiration time in otp_storage
+            otp_storage[email] = {'otp': otp, 'expires_at': otp_expiration}
+            
+            # Send OTP to user's email
+            send_otp_via_email(email, otp)
 
-                subject = 'Password Reset Request'
-                message = f'Dear user,\n\nClick the following link to reset your password:\n{reset_link}\n\nBest regards,\nTeam ElevateEd'
-                from_email = settings.DEFAULT_FROM_EMAIL
-                recipient_list = [email]
+            return JsonResponse({'status': 'success', 'message': 'OTP sent to email.'})
+        else:
+            return JsonResponse({'status': 'error', 'message': 'User with this email does not exist.'})
+    else:   
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'})
+    
 
-                try:
-                    send_mail(subject, message, from_email, recipient_list)
-                    return JsonResponse({'status': 'success', 'message': 'Password reset link sent to your email'})
-                except Exception as e:
-                    return JsonResponse({'status': 'error', 'message': 'Failed to send email: ' + str(e)})
-            else:
-                return JsonResponse({'status': 'error', 'message': 'Email not found'})
-
-    return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
-
-# Password Reset Confirmation View
-@csrf_exempt  # Disable CSRF protection for this view
-def password_reset_confirm(request, uidb64, token):
+@csrf_exempt
+def verify_otp_and_reset_password(request):
     if request.method == 'POST':
-        form_data = json.loads(request.body)  # Get the form data
-        new_password = form_data['password']
-        # print password reset form data
-        print(f"New Password: {new_password}")
+        data = json.loads(request.body)
+        email = data.get('email')
+        otp = data.get('otp')
+        new_password = data.get('new_password')
 
-        try:
-            user_id = force_str(urlsafe_base64_decode(uidb64))  # Decode the user ID
+        if email not in otp_storage:
+            return JsonResponse({'status': 'error', 'message': 'No OTP request found for this email.'})
 
+        stored_otp_info = otp_storage[email]
+        stored_otp = stored_otp_info['otp']
+        expires_at = stored_otp_info['expires_at']
+
+        # Check if OTP matches and is not expired
+        if otp == stored_otp and now() <= expires_at:
+            # OTP is valid, update the password
             with connection.cursor() as cursor:
-                cursor.execute("SELECT id, email FROM users WHERE id = %s", [user_id])
-                user = cursor.fetchone()
+                hashed_password = make_password(new_password)
+                cursor.execute("UPDATE users SET password = %s WHERE email = %s", [hashed_password, email])
 
-                if user:
-                    # Get the timestamp from the token
-                    token_timestamp = custom_password_reset_token._num_seconds(datetime.now())
+            # Clear the OTP from storage after successful reset
+            del otp_storage[email]
 
-                    # Check if the token has expired
-                    if custom_password_reset_token.token_expired(token_timestamp):
-                        return JsonResponse({'status': 'error', 'message': 'Token has expired'})
+            return JsonResponse({'status': 'success', 'message': 'Password reset successfully.'})
+        elif now() > expires_at:
+            return JsonResponse({'status': 'error', 'message': 'OTP has expired.'})
+        else:
+            return JsonResponse({'status': 'error', 'message': 'Invalid OTP.'})
+    else:
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'})
+    
 
-                    # Validate token
-                    if custom_password_reset_token.check_token(user_id, token):
-                        hashed_password = make_password(new_password)
-                        cursor.execute("UPDATE users SET password = %s WHERE id = %s", [hashed_password, user_id])
-                        return JsonResponse({'status': 'success', 'message': 'Password reset successfully'})
-                    else:
-                        return JsonResponse({'status': 'error', 'message': 'Invalid token or user ID'})
-
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)})
-
-    return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
 
    
