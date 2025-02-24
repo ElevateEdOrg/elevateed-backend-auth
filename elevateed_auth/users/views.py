@@ -36,6 +36,8 @@ def register_user(request):
                 return JsonResponse({'status': 'success', 'message': 'User registered successfully'})
             except Exception as e:
                 return JsonResponse({'status': 'error', 'message': str(e)})
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+
 
 # Generate JWT access token  
 def create_jwt_token(user_id, full_name, email, role):
@@ -164,6 +166,7 @@ def verify_otp_and_reset_password(request):
             return JsonResponse({'status': 'error', 'message': 'Invalid OTP.'})
     else:
         return JsonResponse({'status': 'error', 'message': 'Invalid request method.'})
+
     
 
 
