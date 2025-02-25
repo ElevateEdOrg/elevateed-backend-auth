@@ -167,7 +167,4 @@ def verify_otp_and_reset_password(request):
     else:
         return JsonResponse({'status': 'error', 'message': 'Invalid request method.'})
 
-    
-
-
-   
+       
