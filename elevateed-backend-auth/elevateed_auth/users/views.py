@@ -335,7 +335,7 @@ def update_profile(request):
                 'id': user[0],
                 'email': user_provided_email,
                 'full_name': full_name,
-                'avatar_url': avatar_url if avatar_url else None
+                'avatar': avatar_url if avatar_url else None
             }
         })
     return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=403)
