@@ -198,6 +198,7 @@ def verify_otp_and_reset_password(request):
         email = data.get('email')
         otp = data.get('otp')
         new_password = data.get('new_password')
+        hashed_password = make_password(new_password)
 
         if email not in otp_storage:
             return JsonResponse({'status': 'error', 'message': 'No OTP request found for this email.'})
@@ -216,7 +217,7 @@ def verify_otp_and_reset_password(request):
         if otp == stored_otp and now() <= expires_at:
             # OTP is valid, update the password
             with connection.cursor() as cursor:
-                hashed_password = make_password(new_password)
+    
                 user = cursor.execute("UPDATE users SET password = %s WHERE email = %s", [hashed_password, email])
 
             # Clear the OTP from storage after successful reset

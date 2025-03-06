@@ -24,7 +24,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'elevateEd'
+import os
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -113,16 +114,31 @@ WSGI_APPLICATION = 'elevateed_auth.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+#development creds
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': os.getenv('DB_NAME'),  # database name
+#         'USER': os.getenv('DB_USER'),  # PostgreSQL username
+#         'PASSWORD': os.getenv('DB_PASSWORD'),  # PostgreSQL password
+#         'HOST': os.getenv('DB_HOST'),  # PostgreSQL host
+#         'PORT': '5432',  # PostgreSQL port
+#     }
+# }
+
+# production creds
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME'),  # database name
-        'USER': os.getenv('DB_USER'),  # PostgreSQL username
-        'PASSWORD': os.getenv('DB_PASSWORD'),  # PostgreSQL password
-        'HOST': os.getenv('DB_HOST'),  # PostgreSQL host
-        'PORT': '5432',  # PostgreSQL port
+        'NAME': os.getenv('DB_NAME'),          # Your RDS database name
+        'USER': os.getenv('DB_USER'),         # Your RDS username
+        'PASSWORD': os.getenv('DB_PASSWORD'),     # Your RDS password
+        'HOST': os.getenv('DB_HOST'),      # Your RDS endpoint (without 'http://')
+        'PORT': '5432',                  # Default PostgreSQL port
+       
     }
 }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
